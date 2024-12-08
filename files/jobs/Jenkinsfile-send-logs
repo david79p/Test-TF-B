@@ -1,0 +1,42 @@
+pipeline {
+  agent any
+
+  options {
+    timestamps()
+    ansiColor('xterm')
+  }
+
+  stages {
+    stage('Request access to EKS Cluster') {
+      steps {
+        sh """
+          cd ${WORKSPACE}/environment/${ENVIRONMENT}
+          terraform init -input=false
+          terraform output ${ENVIRONMENT}_eks_kubeconfig > ${WORKSPACE}/kubeconfig
+          cd ${WORKSPACE}
+        """
+      }
+    }
+    stage('Logz.io Fluentd solution for Kubernetes') {
+      steps {
+        sh "kubectl --kubeconfig=${WORKSPACE}/kubeconfig apply -f ${WORKSPACE}/files/k8s/logz.io/fluentd-daemonset.yaml"
+      }
+    }
+    stage('Create an eks-admin Service Account and Cluster Role Binding') {
+      steps {
+        sh "kubectl --kubeconfig=${WORKSPACE}/kubeconfig apply -f ${WORKSPACE}/files/k8s/k8s-dashboard/eks-admin-service-account.yaml"
+        sh "kubectl --kubeconfig=${WORKSPACE}/kubeconfig apply -f ${WORKSPACE}/files/k8s/k8s-dashboard/eks-admin-cluster-role-binding.yaml"
+      }
+    }
+  }
+
+  post {
+    success {
+      echo 'successfully sending logs to logz.io'
+    }
+    cleanup {
+      cleanWs()
+    }
+  }
+
+}

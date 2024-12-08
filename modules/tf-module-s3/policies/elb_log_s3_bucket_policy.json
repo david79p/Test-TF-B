@@ -1,0 +1,21 @@
+{
+  "Id": "Policy1498665476602",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Stmt1498665471167",
+      "Action": [
+        "s3:PutObject"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:s3:::${bucket_name}/AWSLogs/*"
+      ],
+      "Principal": {
+        "AWS": [
+          "${elb_account_arn}"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+pipeline {
+  agent any
+
+  options {
+    timestamps()
+    ansiColor('xterm')
+  }
+
+  stages {
+    stage('Request access to EKS Cluster') {
+      steps {
+        sh """
+          cd ${WORKSPACE}/environment/${ENVIRONMENT}
+          terraform init -input=false
+          terraform output ${ENVIRONMENT}_eks_kubeconfig > ${WORKSPACE}/kubeconfig
+          cd ${WORKSPACE}
+        """
+      }
+    }
+    stage('Deploy the Dashboard') {
+      steps {
+        sh 'kubectl --kubeconfig=${WORKSPACE}/kubeconfig apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v1.10.1/src/deploy/recommended/kubernetes-dashboard.yaml'
+      }
+    }
+    stage('Create an eks-admin Service Account and Cluster Role Binding') {
+      steps {
+        sh "kubectl --kubeconfig=${WORKSPACE}/kubeconfig apply -f ${WORKSPACE}/files/k8s/k8s-dashboard/eks-admin-service-account.yaml"
+        sh "kubectl --kubeconfig=${WORKSPACE}/kubeconfig apply -f ${WORKSPACE}/files/k8s/k8s-dashboard/eks-admin-cluster-role-binding.yaml"
+      }
+    }
+    stage('Create Elastic Load Balancer') {
+      steps {
+        sh "kubectl --kubeconfig=${WORKSPACE}/kubeconfig apply -f ${WORKSPACE}/files/k8s/k8s-dashboard/kubernetes-dashboard-external.yaml"
+      }
+    }
+  }
+
+  post {
+    success {
+      echo 'Connect to the Bastion Server and retrieve an authentication token for the eks-admin service account. Copy the <authentication_token> value from the output. You use this token to connect to the dashboard.\n\nkubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep eks-admin | awk "{print $1}")'
+    }
+    cleanup {
+      cleanWs()
+    }
+  }
+
+}

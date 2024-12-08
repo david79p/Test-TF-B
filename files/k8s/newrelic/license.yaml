@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: newrelic-license
+  namespace: kube-system
+type: Opaque
+data:
+  license_key: ZXUwMXh4MGIxOGRmNDI5YzExZGM1ZGYwNGEwZjhiMzJiNDA4OGQ5Nw==

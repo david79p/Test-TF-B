@@ -1,0 +1,97 @@
+// Relative path to the Terraform environment directory. This directory should contain the
+// "root" module for every environment which this pipeline manages.
+environment_dir = "./environment"
+// Name of the downstream Jenkins job which runs Terraform for each environment.
+downstream_job = "UpdateTerraformEnvironment"
+
+properties([
+    parameters([
+        booleanParam(
+            name: 'AlignAllEnvironments',
+            description: 'Run on all existing environment to ensure they are up to date.',
+            defaultValue: false
+        )
+    ])
+])
+
+node {
+    checkout scm
+
+    // Alignment requested by user - trigger downstream jobs for all existing environments without
+    // checking for diffs.
+    if (params.AlignAllEnvironments) {
+        echo "Alignment job requested. Triggering downstream jobs for all environment."
+
+        envs = []
+        output = sh(
+            script: "ls -d ${environment_dir}/*/ | cut -d '/' -f3",
+            returnStdout: true
+        ).trim()
+
+        // Exit normally if output is empty.
+        if (!output?.trim()) {
+            error "No environment found."
+        }
+
+        // Append environment names to list.
+        output.split('\n').each {
+            envs << it
+        }
+
+        // Construct a map of downstream jobs for parallel execution.
+        jobs = envs.collectEntries {
+            [(it): constructJob(it)]
+        }
+
+        // Run jobs in parallel.
+        echo "Triggering downstream jobs for all environment."
+        parallel jobs
+        return
+    }
+
+    echo "Checking for changes in all environment."
+
+    // Get modified environments.
+    modified_envs = []
+    output = sh(
+        script: "git diff --name-only HEAD^ -- ${environment_dir} | cut -d '/' -f2",
+        returnStdout: true
+    ).trim()
+
+    // Exit normally if output is empty.
+    if (!output?.trim()) {
+        echo "No modified environment."
+        currentBuild.result = 'SUCCESS'
+        return
+    }
+
+    // Append environment names to list.
+    output.split('\n').each {
+        echo "Environment '${it}' has been modified."
+        modified_envs << it
+    }
+
+    // Construct a map of downstream jobs for parallel execution.
+    jobs = modified_envs.collectEntries {
+        [(it): constructJob(it)]
+    }
+
+    // Run jobs in parallel.
+    echo "Triggering downstream jobs for all modified environment."
+    parallel jobs
+}
+
+def constructJob(name) {
+    return {
+        build(
+            job: downstream_job,
+            parameters: [
+                [
+                    $class: 'StringParameterValue',
+                    name: 'EnvironmentName',
+                    value: name
+                ]
+            ]
+        )
+    }
+}

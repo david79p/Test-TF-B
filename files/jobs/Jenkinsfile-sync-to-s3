@@ -1,0 +1,23 @@
+pipeline {
+    agent any
+    parameters {
+        string(name: 'BUCKET',description: 'S3 bucket',defaultValue:'s3://156460081782-dev-angular-files')
+        string(name: 'S3PATH',description: 'S3 bucket path',defaultValue:'')
+}
+    stages {
+        stage('sync to S3 bucket') {
+            steps {
+                ansiColor('xterm') {
+                    sh "aws s3 sync . ${params.BUCKET}/${params.S3PATH} --exclude \".*\" --region eu-west-1"
+                }
+            }    
+        }
+        stage('Cleanup') {
+            steps {
+                ansiColor('xterm') {
+                    cleanWs()
+                }
+            }
+        }
+    }
+}
